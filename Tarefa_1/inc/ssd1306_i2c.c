@@ -141,12 +141,46 @@ inline int ssd1306_get_font(uint8_t character)
   else if (character >= '0' && character <= '9') {
     return character - '0' + 27;
   }
-  else if (character == 'v') return 39;
-    else if (character == '^') return 40;
-    else if (character == '<') return 38;
-    else if (character == '>') return 37;
-  else
-    return 0;
+  else if (character == '-')
+    {
+        return 37;
+    }
+    else if (character == '\xC7') // Ç
+    {
+        return 38;
+    }
+    else if (character == '\xC3') // Ã (combinado com próximo byte pode precisar de ajuste)
+    {
+        return 39;
+    }
+    else if (character == '+')
+    {
+        return 40;
+    }
+    else if (character == ':')
+    {
+        return 41;
+    }
+    else if (character == '\xBA') // º (ordinal masculino)
+    {
+        return 42;
+    }
+    else if (character == ',')
+    {
+        return 43;
+    }
+    else if (character == '.')
+    {
+        return 44;
+    }
+    else if (character == '\xB0') // ° (símbolo de grau)
+    {
+        return 45;
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 // Desenha um único caractere no display
@@ -280,3 +314,4 @@ void ssd1306_draw_string_scaled(uint8_t *ssd, int16_t x, int16_t y, const char *
         string++;
     }
 }
+

@@ -18,3 +18,5 @@ extern void ssd1306_draw_bitmap(ssd1306_t *ssd, const uint8_t *bitmap);
 extern void ssd1306_draw_char_scaled(uint8_t *ssd, int16_t x, int16_t y, uint8_t character, int scale);
 extern void ssd1306_draw_string_scaled(uint8_t *ssd, int16_t x, int16_t y, const char *string, int scale);
 extern void ssd1306_draw_string(uint8_t *ssd, int16_t x, int16_t y, char *string);
+extern void ssd1306_draw_string_scaled_custom(uint8_t *ssd, int16_t x, int16_t y, const char *str, int scale, int color);
+extern void ssd1306_draw_char_scaled_custom(uint8_t *ssd, int16_t x, int16_t y, uint8_t character, int scale, int color);
