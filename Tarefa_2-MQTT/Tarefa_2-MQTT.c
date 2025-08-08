@@ -14,8 +14,8 @@
 #include "lwip/dns.h"
 #include "lwip/ip_addr.h"
 
-// ===== Definições de pinos ====
-const uint led_pin_green = 11;
+// ===== DEFINIÇÕES DOS PINOS ====
+const uint LED_GREEN = 11;
 const uint I2C_SDA = 14;
 const uint I2C_SCL = 15;
 const int VRX = 26;
@@ -28,9 +28,11 @@ struct render_area frame_area = {
     .start_page = 0,
     .end_page = ssd1306_n_pages - 1};
 
-// ===== CONFIGURAÇÕES =====
+// ===== CONFIGURAÇÕES DO WIFI=====
 #define WIFI_SSID "iPhone (2)"
 #define WIFI_PASSWORD "12345678"
+
+// ===== CONFIGURAÇÕES DO MQTT=====
 #define MQTT_SERVER "mqtt.iot.natal.br"
 #define MQTT_PORT 1883
 #define MQTT_USER "desafio20"
@@ -46,7 +48,7 @@ mqtt_client_t *client;
 ip_addr_t mqtt_server_ip;
 bool mqtt_connected = false;
 
-// Temperatura
+// ===== TEMPERATURA ===== 
 
 typedef struct
 {
@@ -56,7 +58,7 @@ typedef struct
 
 QueueHandle_t displayQueue;
 
-// Função para ler temperatura do sensor interno
+// ===== FUNÇÃO PARA LER A TEMPERATURA DO SENSOR INTERNO =====
 float read_onboard_temperature()
 {
     const float conversion_factor = 3.3f / (1 << 12);
@@ -66,7 +68,7 @@ float read_onboard_temperature()
     return 27.0f - (voltage - 0.706f) / 0.001721f;
 }
 
-// Tarefa para atualizar o display OLED
+// =====Tarefa para atualizar o display OLED
 void vdisplayTask(void *pvParameters)
 {
     screenInfo data;
@@ -172,19 +174,6 @@ void dns_found_cb(const char *name, const ip_addr_t *ipaddr, void *callback_arg)
         printf("Erro ao resolver broker MQTT.\n");
     }
 }
-// // Tarefa para piscar o LED verde
-// void vLEDTask(void *pvParameters)
-// {
-//     for (;;)
-//     {
-//         gpio_put(led_pin_green, 1);
-//         vTaskDelay(pdMS_TO_TICKS(50));
-//         gpio_put(led_pin_green, 0);
-//         vTaskDelay(pdMS_TO_TICKS(950));
-//     }
-// }
-
-// Tarefa para ler a posição do joystick
 void vjoystick(void *pvParameters)
 {
     char ultimaDirecao[16] = "";
@@ -199,33 +188,37 @@ void vjoystick(void *pvParameters)
         screenInfo data;
         if (xQueuePeek(displayQueue, &data, pdMS_TO_TICKS(50)) == pdTRUE)
         {
-            char direcao[16] = "Parado";
 
-            if (adc_y_raw < 300)
-                strcpy(direcao, "Baixo");
+            if (adc_y_raw < 500)
+                strcpy(data.movement, "Baixo");
             else if (adc_y_raw > 3000)
-                strcpy(direcao, "Cima");
-            else if (adc_x_raw < 300)
-                strcpy(direcao, "Esquerda");
+                strcpy(data.movement, "Cima");
+            else if (adc_x_raw < 500)
+                strcpy(data.movement, "Esquerda");
             else if (adc_x_raw > 3000)
-                strcpy(direcao, "Direita");
+                strcpy(data.movement, "Direita");
 
-            // Atualiza a fila para o display
-            strcpy(data.movement, direcao);
             xQueueOverwrite(displayQueue, &data);
             // Publica no MQTT somente se a direção mudou
-            if (mqtt_connected && strcmp(direcao, ultimaDirecao) && mqtt_ready_to_publish != 0)
+            if (mqtt_connected && strcmp(data.movement, ultimaDirecao) && mqtt_ready_to_publish != 0)
             {
                 char msg[32];
-                snprintf(msg, sizeof(msg), "%s", direcao);
+                snprintf(msg, sizeof(msg), "%s", data.movement);
 
-                err_t err = mqtt_publish(client, "sensor/joystick", msg, strlen(msg), 0, 0, NULL, NULL);
+                err_t err = mqtt_publish(client, MQTT_TOPIC_JOY, msg, strlen(msg), 0, 1, NULL, NULL);
                 if (err == ERR_OK)
+                {
                     printf("Joystick publicado: %s\n", msg);
+
+                    gpio_put(LED_GREEN, 1);    // acende
+                    vTaskDelay(pdMS_TO_TICKS(50)); // espera 50 ms
+                    gpio_put(LED_GREEN, 0);    // apaga
+                }
+
                 else
                     printf("Erro ao publicar joystick: %d\n", err);
 
-                strcpy(ultimaDirecao, direcao); // atualiza
+                strcpy(ultimaDirecao, data.movement); // atualiza
             }
         }
 
@@ -236,70 +229,48 @@ void vjoystick(void *pvParameters)
 // Tarefa para ler o sensor de temperatura
 void vSensorTask(void *pvParameters)
 {
+    bool primeiraVez = true;
+     vTaskDelay(pdMS_TO_TICKS(1000));
     for (;;)
     {
+       
         float temp = read_onboard_temperature();
 
         screenInfo data;
-        if (xQueuePeek(displayQueue, &data, pdMS_TO_TICKS(50)) == pdTRUE)
+        if (xQueuePeek(displayQueue, &data, pdMS_TO_TICKS(50)) == pdTRUE && mqtt_connected)
         {
             data.temperature = temp;
             xQueueOverwrite(displayQueue, &data);
-            screenInfo data;
-            if (mqtt_ready_to_publish && mqtt_connected)
+
+            if (mqtt_ready_to_publish && mqtt_connected && mqtt_ready_to_publish != 0)
             {
                 char msg[64];
                 snprintf(msg, sizeof(msg), " %.0f", data.temperature);
-                err_t err = mqtt_publish(client, MQTT_TOPIC_TEMP, msg, strlen(msg), 0, 0, NULL, NULL);
-                if (err != ERR_OK)
+                err_t err = mqtt_publish(client, MQTT_TOPIC_TEMP, msg, strlen(msg), 0, 1, NULL, NULL);
+                if (err == ERR_OK)
                 {
-                    printf("Erro ao publicar: %d\n", err);
+                    printf("temp: %s\n", msg);
+                    gpio_put(LED_GREEN, 1);    // acende
+                    vTaskDelay(pdMS_TO_TICKS(50)); // espera 50 ms
+                    gpio_put(LED_GREEN, 0);    // apaga
                 }
                 else
                 {
-                    printf("temp: %s\n", msg);
-                    
+                    printf("Erro ao publicar: %d\n", err);
                 }
             }
+            vTaskDelay(pdMS_TO_TICKS(30000)); // reduzir frequência
         }
-
-        vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
 
-// void mqtt_publish_task(void *pvParameters)
-// {
-//     while (1)
-//     {
-//         screenInfo data;
-//         if (xQueuePeek(displayQueue, &data, pdMS_TO_TICKS(100)) == pdTRUE)
-//         {
-//             if (mqtt_ready_to_publish && mqtt_connected)
-//             {
-//                 char msg[64];
-//                 snprintf(msg, sizeof(msg), " %.0f", data.temperature);
-//                 err_t err = mqtt_publish(client, MQTT_TOPIC_TEMP, msg, strlen(msg), 0, 0, NULL, NULL);
-//                 if (err != ERR_OK)
-//                 {
-//                     printf("Erro ao publicar: %d\n", err);
-//                 }
-//                 else
-//                 {
-//                     printf("temp: %s\n", msg);
-//                     mqtt_ready_to_publish = false; // para não publicar toda hora
-//                 }
-//             }
-//             vTaskDelay(pdMS_TO_TICKS(1000));
-//         }
-//     }
-// }
 int main()
 {
     stdio_init_all();
     sleep_ms(2000);
     // Inicialização do LED
-    gpio_init(led_pin_green);
-    gpio_set_dir(led_pin_green, GPIO_OUT);
+    gpio_init(LED_GREEN);
+    gpio_set_dir(LED_GREEN, GPIO_OUT);
 
     // Inicialização do ADC (joystick + temperatura)
     adc_init();
@@ -327,7 +298,7 @@ int main()
             ;
     }
     // Primeiro valor da fila
-    screenInfo init_data = {.temperature = 0.0f, .movement = "Aguardando"};
+    screenInfo init_data = {.temperature = 0.0f, .movement = ""};
     xQueueOverwrite(displayQueue, &init_data);
 
     printf("Inicializando Wi-Fi + MQTT\n");
@@ -363,11 +334,10 @@ int main()
         return -1;
     }
     // Criação das tarefas
-    // xTaskCreate(vLEDTask, "LED Task", 128, NULL, 1, NULL);
+    xTaskCreate(vSensorTask, "Sensor Task", 256, NULL, 1, NULL);
     xTaskCreate(vjoystick, "Joystick Task", 256, NULL, 1, NULL);
     xTaskCreate(vdisplayTask, "Display Task", 256, NULL, 1, NULL);
-    xTaskCreate(vSensorTask, "Sensor Task", 256, NULL, 1, NULL);
-    // xTaskCreate(mqtt_publish_task, "Sensor Task", 256, NULL, 1, NULL);
+    
 
     // Inicia o escalonador do FreeRTOS
     vTaskStartScheduler();
