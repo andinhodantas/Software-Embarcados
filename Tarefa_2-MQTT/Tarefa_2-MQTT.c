@@ -68,7 +68,7 @@ float read_onboard_temperature()
     return 27.0f - (voltage - 0.706f) / 0.001721f;
 }
 
-// =====Tarefa para atualizar o display OLED
+// ===== TAREFA PARA ATAUALIZAR O DISPLAY OLED =====
 void vdisplayTask(void *pvParameters)
 {
     screenInfo data;
@@ -174,6 +174,8 @@ void dns_found_cb(const char *name, const ip_addr_t *ipaddr, void *callback_arg)
         printf("Erro ao resolver broker MQTT.\n");
     }
 }
+
+// ===== t
 void vjoystick(void *pvParameters)
 {
     char ultimaDirecao[16] = "";
@@ -210,23 +212,23 @@ void vjoystick(void *pvParameters)
                 {
                     printf("Joystick publicado: %s\n", msg);
 
-                    gpio_put(LED_GREEN, 1);    // acende
-                    vTaskDelay(pdMS_TO_TICKS(50)); // espera 50 ms
-                    gpio_put(LED_GREEN, 0);    // apaga
+                    gpio_put(LED_GREEN, 1);    // ACENDE O LED VERDE
+                    vTaskDelay(pdMS_TO_TICKS(50)); // ESPERA 50 ms
+                    gpio_put(LED_GREEN, 0);    // APAGA O LED VERDE
                 }
 
                 else
                     printf("Erro ao publicar joystick: %d\n", err);
 
-                strcpy(ultimaDirecao, data.movement); // atualiza
+                strcpy(ultimaDirecao, data.movement);
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(100)); // reduzir frequência
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
-// Tarefa para ler o sensor de temperatura
+// ===== TAREFA PARA FAZER A LEITURA DO SENSOR DE TEMPERATURA =====
 void vSensorTask(void *pvParameters)
 {
     bool primeiraVez = true;
@@ -250,16 +252,16 @@ void vSensorTask(void *pvParameters)
                 if (err == ERR_OK)
                 {
                     printf("temp: %s\n", msg);
-                    gpio_put(LED_GREEN, 1);    // acende
-                    vTaskDelay(pdMS_TO_TICKS(50)); // espera 50 ms
-                    gpio_put(LED_GREEN, 0);    // apaga
+                    gpio_put(LED_GREEN, 1);    // ACENDE O LED VERDE
+                    vTaskDelay(pdMS_TO_TICKS(50)); // ESPERA 50 ms
+                    gpio_put(LED_GREEN, 0);    // APAGA O LED VERDE
                 }
                 else
                 {
                     printf("Erro ao publicar: %d\n", err);
                 }
             }
-            vTaskDelay(pdMS_TO_TICKS(30000)); // reduzir frequência
+            vTaskDelay(pdMS_TO_TICKS(30000)); 
         }
     }
 }
