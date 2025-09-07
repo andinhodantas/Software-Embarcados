@@ -41,14 +41,16 @@ volatile bool time_synchronized = false;
 volatile time_t current_utc_time = 0;
 #define NTP_SERVER "pool.ntp.br" // Servidor NTP do Brasil
 
-// ===== FUNÇÃO PARA ATAUALIZAR O DISPLAY OLED =====
-void display_message_inicializacao(const char *line1, const char *line2, const char *line3, const char *line4)
+// ===== FUNÇÃO PARA ATAUALIZAR O DISPLAY OLED  AO INICIAR =====
+void display_message_init(const char *line1, const char *line2, const char *line3, const char *line4)
 {
+    // Cria área de renderização que cobre toda a tela
     struct render_area area = {0, ssd1306_width - 1, 0, ssd1306_n_pages - 1};
     calculate_render_area_buffer_length(&area);
     uint8_t buffer[ssd1306_buffer_length];
-    memset(buffer, 0, sizeof(buffer));
+    memset(buffer, 0, sizeof(buffer));// Limpa o buffer antes de desenhar
 
+    // Escreve cada linha no display (se não for NULL)
     if (line1)
         ssd1306_draw_string(buffer, 5 , 0, (char *)line1);
     if (line2)
@@ -57,8 +59,10 @@ void display_message_inicializacao(const char *line1, const char *line2, const c
         ssd1306_draw_string(buffer, 0, 32, (char *)line3);
     if (line4)
         ssd1306_draw_string(buffer, 0, 48, (char *)line4);
-    render_on_display(buffer, &area);
+    render_on_display(buffer, &area);// Atualiza display com conteúdo do buffer
 }
+
+// ===== FUNÇÃO PARA ATAUALIZAR O DISPLAY OLED  =====
 void display_message(mpu6050_data_t *sensor_data)
 {
     struct render_area area = {0, ssd1306_width - 1, 0, ssd1306_n_pages - 1};
@@ -66,6 +70,7 @@ void display_message(mpu6050_data_t *sensor_data)
     uint8_t buffer[ssd1306_buffer_length];
     memset(buffer, 0, sizeof(buffer));
 
+    // Converte dados do sensor em strings
     char tempStr[20];
     snprintf(tempStr, sizeof(tempStr), "Temp: %.1f °C", sensor_data->temperature);
 
@@ -104,6 +109,7 @@ void mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection_status
     }
 }
 
+// ===== CALLBACK DE RESOLUÇÃO DNS =====
 void dns_found_cb(const char *name, const ip_addr_t *ipaddr, void *callback_arg)
 {
     if (ipaddr != NULL)
@@ -137,7 +143,7 @@ int main()
 {
     stdio_init_all();
 
-    // I2C 0 para MPU-6050
+     // === INICIALIZA I2C0 PARA MPU-6050 ===
     i2c_init(i2c0, 400 * 1000);
     gpio_set_function(I2C0_SDA, GPIO_FUNC_I2C);
     gpio_set_function(I2C0_SCL, GPIO_FUNC_I2C);
@@ -148,7 +154,7 @@ int main()
         printf("Falha ao inicializar o MPU6050!\n");
     }
 
-    // I2C 1 para Display OLED
+    // === INICIALIZA I2C1 PARA DISPLAY OLED ===
     i2c_init(i2c1, 400 * 1000);
     gpio_set_function(I2C1_SDA, GPIO_FUNC_I2C);
     gpio_set_function(I2C1_SCL, GPIO_FUNC_I2C);
@@ -156,25 +162,30 @@ int main()
     gpio_pull_up(I2C1_SCL);
     ssd1306_init(i2c1);
 
+    // === CONFIGURA LED INDICADOR ===
     gpio_init(LED_PIN_GREEN);
     gpio_set_dir(LED_PIN_GREEN, GPIO_OUT);
-    display_message_inicializacao("conctando ", " Ao Wi-Fi", NULL, NULL);
+    display_message_init("conctando ", " Ao Wi-Fi", NULL, NULL);
+
+    // === INICIALIZA WIFI ===
     if (cyw43_arch_init())
     {
-        display_message_inicializacao("ERRO", " no driver Wi-Fi", NULL, NULL);
+        display_message_init("ERRO", " no driver Wi-Fi", NULL, NULL);
         return -1;
     }
 
     cyw43_arch_enable_sta_mode();
     if (cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASSWORD, CYW43_AUTH_WPA2_AES_PSK, 30000))
     {
-        display_message_inicializacao("ERRO", "WiFi Nao Conecta", NULL, NULL);
+        display_message_init("ERRO", "WiFi Nao Conecta", NULL, NULL);
         return -1;
     }
 
-    display_message_inicializacao(NULL, "Conectando ao ", "MQTT", ip4addr_ntoa(netif_ip4_addr(netif_default)));
+    // === RESOLVE E CONECTA AO BROKER MQTT ===
+    display_message_init(NULL, "Conectando ao ", "MQTT", ip4addr_ntoa(netif_ip4_addr(netif_default)));
     dns_gethostbyname(MQTT_SERVER, &mqtt_server_ip, dns_found_cb, NULL);
 
+    // Variáveis de controle de tempo
     absolute_time_t last_sensor_read = get_absolute_time();
     absolute_time_t last_ntp_sync = get_absolute_time();
     absolute_time_t last_publish_time = get_absolute_time();
@@ -183,7 +194,7 @@ int main()
 
     while (1)
     {
-        cyw43_arch_poll();
+        cyw43_arch_poll();// Mantém Wi-Fi e TCP/IP funcionando
 
         // === LEITURA DO SENSOR ===
         if (absolute_time_diff_us(last_sensor_read, get_absolute_time()) >= 1000000)
@@ -193,9 +204,10 @@ int main()
             mpu6050_data_t sensor_data;
             if (mpu6050_read_data(&sensor_data))
             {
-                // Atualiza display OLED
+                // Atualiza display com dados do sensor
                 display_message(&sensor_data);
 
+                // Publica no MQTT se houver mudança significativa ou se passou 60s
                 bool has_changed = (fabs(sensor_data.accel_x - last_published_data.accel_x) > 0.1);
                 if ((absolute_time_diff_us(last_publish_time, get_absolute_time()) > 10e6 && has_changed) ||
                     (absolute_time_diff_us(last_publish_time, get_absolute_time()) > 60e6))
@@ -206,6 +218,7 @@ int main()
                         char payload[512];
                         char timestamp_str[20];
 
+                        // Se tempo foi sincronizado, gera timestamp
                         if (time_synchronized)
                         {
                             static absolute_time_t last_time_update = {0};
@@ -233,6 +246,7 @@ int main()
                             strcpy(timestamp_str, "1970-01-01T00:00:00");
                         }
 
+                        // Monta JSON para publicação no MQTT
                         snprintf(payload, sizeof(payload),
                                  "{\"team\":\"desafio%s\",\"device\":\"bitdoglab_%s\",\"ip\":\"%s\",\"ssid\":\"%s\",\"sensor\":\"MPU-6050\",\"data\":{\"accel\":{\"x\":%.2f,\"y\":%.2f,\"z\":%.2f},\"gyro\":{\"x\":%.2f,\"y\":%.2f,\"z\":%.2f},\"temperature\":%.1f},\"timestamp\":\"%s\"}",
                                  NUMERO_DESAFIO, SEU_NOME,
@@ -240,6 +254,8 @@ int main()
                                  sensor_data.accel_x, sensor_data.accel_y, sensor_data.accel_z,
                                  sensor_data.gyro_x, sensor_data.gyro_y, sensor_data.gyro_z,
                                  sensor_data.temperature, timestamp_str);
+
+                        // Publica no broker
                         if (mqtt_connected && mqtt_client_is_connected(client))
                         {
 
@@ -255,7 +271,7 @@ int main()
                             else
                             {
                                 printf("MQTT: Erro ao publicar.\n");
-                                display_message_inicializacao("ERRO", "ao publicar", NULL, NULL);
+                                display_message_init("ERRO", "ao publicar", NULL, NULL);
                             }
                         }
                         else
@@ -267,7 +283,7 @@ int main()
             }
         }
 
-        // === SINCRONIZAÇÃO NTP ===
+        // === SINCRONIZAÇÃO NTP (executa até obter tempo válido) ===
         while (!time_synchronized)
         {
             if (ntp_get_time(NTP_SERVER, 5000))
@@ -282,6 +298,6 @@ int main()
             }
         }
 
-        sleep_ms(50); // Evita travar a CPU
+        sleep_ms(50); // Pequena pausa para não ocupar 100% da CPU
     }
 }
