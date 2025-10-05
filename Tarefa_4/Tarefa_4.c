@@ -212,8 +212,10 @@ static void connection_manager_task(void *pvParameters)
     vTaskDelay(pdMS_TO_TICKS(100));
     cyw43_arch_init();
     cyw43_arch_enable_sta_mode();
+    vTaskDelay(pdMS_TO_TICKS(500));
     display_message_init("conctando ", " Ao Wi-Fi", NULL, NULL, NULL);
     printf(" Conectando ao Wi-Fi: %s\n", WIFI_SSID);
+    
     if (cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASSWORD, CYW43_AUTH_WPA2_AES_PSK, 30000))
     {
         printf(" Falha crítica na conexão Wi-Fi. Reiniciando.\n");
